@@ -134,7 +134,7 @@ const spider = async (url, map, level) => {
 const showReport = map => {
     map = map && map instanceof Map ? map : false
     if (!map) return
-    console.log(157, {map})
+    if (debug) console.log(157, {map})
     
     const linksSkipped = Array.from(map.keys()).filter(key => map.get(key)[1]===0)
     if (linksSkipped.length) {
