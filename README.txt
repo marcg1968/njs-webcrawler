@@ -1,16 +1,23 @@
 
-INSTALLATION
+Simple (Linux) commandline tool to crawl a website and check validity of all links
 
-Install from current directory using the following command
+
+INSTALL
+
+Clone the repo to a location and run
+
+    yarn install
+
+Do a global install from current directory using the following command
 
     yarn global add file:$PWD
 
 
-UNINSTALLATION
+UNINSTALL
 
     yarn global remove njs-webcrawler
 
 
-RUNNING
+USAGE
 
     webcrawler START_URL
