@@ -2,11 +2,7 @@
 
 const axios = require('axios')
 const cheerio = require('cheerio')
-const { report, cpuUsage } = require('process')
 const process = require('process')
-const sqlite3 = require('sqlite3')
-
-const db = new sqlite3.Database(':memory:')
 
 let baseUrl,
     startUrl = (process.argv.length > 2) ? process.argv[2] : false,
@@ -19,17 +15,6 @@ const delay = async (msec) => {
 	msec = parseInt(msec) || 1000
 	if (debug) console.log(`sleeping ${msec}msecs ...`)
 	return new Promise(resolve => setTimeout(resolve, msec))
-}
-
-const dbCreate = () => {
-    db.run(`
-        CREATE TABLE links (
-            _id INTEGER PRIMARY KEY NOT NULL,
-            url TEXT NOT NULL,
-            linkText TEXT,
-            modified DATETIME DEFAULT (datetime('now', 'localtime'))
-        );
-    `)
 }
 
 const getLinks = async (url) => {
@@ -48,10 +33,8 @@ const getLinks = async (url) => {
 		const $ = cheerio.load(pageHTML.data)
 
 		$('a[href]').each((i, e) => {
-			// let _startUrl = startUrl.replace(/\/+$/, '') // remove trailing /
 			let url = $(e).attr('href')
 			if (!url || url.startsWith('#')) return
-			
 			url = url.replace(/\/+$/, '') // remove trailing /
 			url = url.startsWith('http') ? url : `${baseUrl}${url}`
 			let linkText = $(e).text() && $(e).text().trim().length ? $(e).text().trim() : url
@@ -67,10 +50,8 @@ const getLinks = async (url) => {
 
 const spider = async (url, map, level) => {
 	level = level || 0
-	// map = map || new Map()
 	map = (map instanceof Map) ? map : new Map() // url: [ link_text, CODE (-1=error, 0=not fetched, 1=fetched) ]
 
-	// if (!url.startsWith(startUrl)) return map
     if (url === startUrl && level===0) map.set(url, ['__START__', 0])
     if (url === startUrl && level===0) baseUrl = startUrl.match(/^https?\:\/\/[^/]+/)[0]
 
@@ -81,7 +62,6 @@ const spider = async (url, map, level) => {
 	let _map = await getLinks(url)
     if (!debug) {
         process.stdout.cursorTo(0)
-        //process.stdout.write(' '.repeat(80))
         process.stdout.write(' '.repeat(process.stdout.getWindowSize()[0]))
         process.stdout.cursorTo(0)
         let idx = Array.from(map.keys()).findIndex(key => key === url) || 0
@@ -92,7 +72,6 @@ const spider = async (url, map, level) => {
     if (debug) console.log(49, {
         _map,
         url, 
-        //asObj: Object.fromEntries(_map)
     })
     if (_map === false) { // url wasn't able to be fetched by axios
         let item = (map.has(url)) ? map.get(url) : null
@@ -153,7 +132,6 @@ const spider = async (url, map, level) => {
 }
 
 const showReport = map => {
-    // map = map || false
     map = map && map instanceof Map ? map : false
     if (!map) return
     console.log(157, {map})
@@ -194,6 +172,3 @@ const usage = () => {
     if (debug) console.log(124, {map, level})
     showReport(map)
 })()
-
-
- 
