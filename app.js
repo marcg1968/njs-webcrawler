@@ -2,14 +2,14 @@
 
 const axios = require('axios')
 const cheerio = require('cheerio')
-const { report } = require('process')
+const { report, cpuUsage } = require('process')
 const process = require('process')
 const sqlite3 = require('sqlite3')
 
 const db = new sqlite3.Database(':memory:')
 
 let baseUrl,
-    startUrl = (process.argv.length > 2) ? process.argv[2] : 'https://soarcorowa.com/links',
+    startUrl = (process.argv.length > 2) ? process.argv[2] : false,
     debug = false
 
 const setDebug = (bool) => debug = !!(bool || false)
@@ -184,8 +184,12 @@ const showReport = map => {
     }
 }
 
+const usage = () => {
+    console.log(`Usage: ${process.argv[1]} START_URL`)
+}
+
 ;(async () => {
-    
+    if (!startUrl) return usage()
 	let { level, map } = await spider(startUrl)
     if (debug) console.log(124, {map, level})
     showReport(map)
