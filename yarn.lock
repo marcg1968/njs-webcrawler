@@ -133,11 +133,6 @@ htmlparser2@^8.0.1:
     domutils "^3.0.1"
     entities "^4.3.0"
 
-jetty@^0.2.1:
-  version "0.2.1"
-  resolved "https://registry.yarnpkg.com/jetty/-/jetty-0.2.1.tgz#9af255efe4bbe33296acf63165e3bf1816678593"
-  integrity sha512-L7w5/tzjq6Pd0quDEj9uV0QplSexi68b0B+3CjjWD/aaWZwX5n/dsB03InNjkDWsGnbQ7iggzPSZcIJL3ldAzA==
-
 mime-db@1.52.0:
   version "1.52.0"
   resolved "https://registry.yarnpkg.com/mime-db/-/mime-db-1.52.0.tgz#bbabcdc02859f4987301c856e3387ce5ec43bf70"
