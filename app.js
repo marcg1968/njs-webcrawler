@@ -169,6 +169,9 @@ const usage = () => {
 ;(async () => {
     if (!startUrl) return usage()
 	let { level, map } = await spider(startUrl)
+    process.stdout.cursorTo(0)
+    process.stdout.write(' '.repeat(process.stdout.getWindowSize()[0]))
     if (debug) console.log(124, {map, level})
+    if (level===0) return console.log(`URL ${startUrl} not found`)
     showReport(map)
 })()
