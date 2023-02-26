@@ -6,7 +6,8 @@ const process = require('process')
 
 let baseUrl,
     startUrl = (process.argv.length > 2) ? process.argv[2] : false,
-    debug = false
+    // debug = false
+    debug = (process.argv.length > 3) ? !!(process.argv[3]) : false
 
 const setDebug = (bool) => debug = !!(bool || false)
 
@@ -21,7 +22,7 @@ const getLinks = async (url) => {
 	let map
     if (debug) console.log(33, `baseUrl = ${baseUrl}`)
 	try {
-        map = new Map() // url: [ link_text, CODE (-1=error, 0=not fetched, 1=fetched) ]
+        map = new Map() // url: [ link_text, CODE (-1=error, 0=not fetched, 1=fetched, 2=non-text) ]
 		const pageHTML = await axios.get(url)
 
         /* return true if not text */
@@ -50,7 +51,7 @@ const getLinks = async (url) => {
 
 const spider = async (url, map, level) => {
 	level = level || 0
-	map = (map instanceof Map) ? map : new Map() // url: [ link_text, CODE (-1=error, 0=not fetched, 1=fetched) ]
+	map = (map instanceof Map) ? map : new Map() // url: [ link_text, CODE (-1=error, 0=not fetched, 1=fetched, 2=non-text) ]
 
     if (url === startUrl && level===0) map.set(url, ['__START__', 0])
     if (url === startUrl && level===0) baseUrl = startUrl.match(/^https?\:\/\/[^/]+/)[0]
@@ -60,19 +61,7 @@ const spider = async (url, map, level) => {
     }
 
 	let _map = await getLinks(url)
-    if (!debug) {
-        process.stdout.cursorTo(0)
-        process.stdout.write(' '.repeat(process.stdout.getWindowSize()[0]))
-        process.stdout.cursorTo(0)
-        let idx = Array.from(map.keys()).findIndex(key => key === url) || 0
-        process.stdout.write(
-            `processing url: ${url} ${idx + 1} of ${map.size}` 
-        )
-    }
-    if (debug) console.log(49, {
-        _map,
-        url, 
-    })
+    if (debug) console.log(49, { _map, url, })
     if (_map === false) { // url wasn't able to be fetched by axios
         let item = (map.has(url)) ? map.get(url) : null
         item = item ? [...item.slice(0,1), -1] : ['___', -1]
@@ -162,8 +151,18 @@ const showReport = map => {
     }
 }
 
+const outputProgress = ({url=null, index=0, total=0}) => {
+    if (!url) return
+    process.stdout.cursorTo(0)
+    process.stdout.write(' '.repeat(process.stdout.getWindowSize()[0]))
+    process.stdout.cursorTo(0)
+    process.stdout.write(
+        `processing url: ${url} ${index} of ${total}` 
+    )
+}
+
 const usage = () => {
-    console.log(`Usage: ${process.argv[1]} START_URL`)
+    console.log(`Usage: ${process.argv[1]} START_URL [OUTPUT_DEBUG]`)
 }
 
 ;(async () => {
