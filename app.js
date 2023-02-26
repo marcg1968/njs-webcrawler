@@ -11,6 +11,94 @@ let baseUrl,
 
 const setDebug = (bool) => debug = !!(bool || false)
 
+class LinkMap {
+    map = null
+    startUrl = null
+    static STATUS_NOT_FETCHED    = 0
+    static STATUS_NOT_FOUND      = -1
+    static STATUS_FETCHED        = 1
+    static STATUS_NON_TEXT       = 2
+
+    constructor(startUrl) {
+        this.map = new Map()
+        if (startUrl) {
+            this.startUrl = startUrl
+            this.addUrl(startUrl)
+        }
+    }
+    addUrl = url => {
+        if (!this.map.has(url)) 
+            this.map.set(
+                url,
+                {
+                    linkText: [],
+                    referrer: [],
+                    status: this.constructor.STATUS_NOT_FETCHED
+                }
+            )
+        if (!this.startUrl) this.startUrl = url
+    }
+    get = url => {
+        if (!url) return
+        return this.map.has(url) ? this.map.get(url) : undefined
+    }
+    getAll = () => {
+        return this.map ? this.map : new Map()
+    }
+    getStatusForUrl = url => {
+        if (!url || !this.map) return
+        const _url = this.get(url)
+        if (!_url) return
+        const { status } = _url
+        return typeof status !== 'undefined' ? status : undefined
+    }
+    addLinkText = (url, text) => {
+        this.#process('linkText', url, text)
+    }
+    addReferrer = (url, referrer) => {
+        this.#process('referrer', url, referrer)
+    }
+    setStatus = (url, val) => {
+        // val = val && !isNaN(parseInt(val)) ? parseInt(val) : null
+        val = isNaN(parseInt(val)) ? null : val
+        if (!val) return
+        this.#process('status', url, val)
+    }
+    getLinksByStatusCode = code => {
+        code = isNaN(parseInt(code)) ? null : code
+        // code = code && !isNaN(parseInt(code)) ? parseInt(code) : null
+        if (    code === null
+            ||  ![
+                    this.constructor.STATUS_NOT_FETCHED,
+                    this.constructor.STATUS_NOT_FOUND,
+                    this.constructor.STATUS_FETCHED,
+                    this.constructor.STATUS_NON_TEXT
+                ].includes(code)
+            ||  !this.map.size
+        ) return
+        return Array.from(this.map.keys())
+            .filter(url => this.map.get(url).status === code)
+    }
+    #process = (type, url, detail) => {
+        type = (type==='linkText' || type==='referrer' || type==='status') ? type : false
+        url = url || false
+        detail = detail || false
+        if (!type || !url || !detail) return
+        this.addUrl(url)
+        let obj = this.map.get(url) || {}
+        let {linkText=[], referrer=[], status=0} = obj
+        if (type==='linkText') if (!linkText.includes(detail)) linkText.push(detail)
+        if (type==='referrer') if (!referrer.includes(detail)) referrer.push(detail)
+        if (type==='status') {
+            obj.status = detail
+            this.map.set(url, obj)
+        }
+    }
+    dump = () => {
+        console.log(require('util').inspect(this.map, { showHidden: true, depth: null }))
+    }
+}
+
 const delay = async (msec) => {
 	msec = msec || 1000
 	msec = parseInt(msec) || 1000
@@ -18,137 +106,115 @@ const delay = async (msec) => {
 	return new Promise(resolve => setTimeout(resolve, msec))
 }
 
-const getLinks = async (url) => {
-	let map
-    if (debug) console.log(33, `baseUrl = ${baseUrl}`)
+const getLinks = async (url, linkmap) => {
+    linkmap = (linkmap && linkmap instanceof LinkMap) ? linkmap : false
+    if (!linkmap) return
+    const { STATUS_NOT_FOUND, STATUS_FETCHED, STATUS_NON_TEXT } = LinkMap
+    const referrer = url
 	try {
-        map = new Map() // url: [ link_text, CODE (-1=error, 0=not fetched, 1=fetched, 2=non-text) ]
 		const pageHTML = await axios.get(url)
+        linkmap.addUrl(url)
+        linkmap.setStatus(url, STATUS_FETCHED)
 
-        /* return true if not text */
+        /* set status to 2 if not text */
         let { headers } = pageHTML
         let contentType = headers['content-type'] || headers2['Content-type'] || headers2['Content-Type']
-        if (debug) console.log(41, {contentType})
-        if (!contentType.toLowerCase().startsWith('text/')) return true
+        if (!contentType.toLowerCase().startsWith('text/')) linkmap.setStatus(url, STATUS_NON_TEXT)
 
 		const $ = cheerio.load(pageHTML.data)
-
 		$('a[href]').each((i, e) => {
 			let url = $(e).attr('href')
 			if (!url || url.startsWith('#')) return
 			url = url.replace(/\/+$/, '') // remove trailing /
 			url = url.startsWith('http') ? url : `${baseUrl}${url}`
 			let linkText = $(e).text() && $(e).text().trim().length ? $(e).text().trim() : url
-			map.set(url, [linkText, 0])
+            linkmap.addUrl(url)
+            linkmap.addLinkText(url, linkText)
+            linkmap.addReferrer(url, referrer)
 		})
 	}
 	catch (err) {
         if (debug) console.error(57, err.response.status, {url: url})
+        linkmap.setStatus(url, STATUS_NOT_FOUND)
         return false
     }
-	return map
+    return true
 }
 
-const spider = async (url, map, level) => {
+const spider = async (url, linkmap, level) => {
 	level = level || 0
-	map = (map instanceof Map) ? map : new Map() // url: [ link_text, CODE (-1=error, 0=not fetched, 1=fetched, 2=non-text) ]
+	linkmap = (linkmap instanceof LinkMap) ? linkmap : new LinkMap(url)
+    const { STATUS_NOT_FETCHED } = LinkMap
 
-    if (url === startUrl && level===0) map.set(url, ['__START__', 0])
     if (url === startUrl && level===0) baseUrl = startUrl.match(/^https?\:\/\/[^/]+/)[0]
 
-    if (level===0) {
-        console.log(`spidering ${url} ...`)
-    }
+    if (debug) console.log(175, 'linkmap', require('util').inspect(linkmap, { showHidden: true, depth: null }))
+    if (level===0) console.log(`spidering ${url} ...`)
 
-	let _map = await getLinks(url)
-    if (debug) console.log(49, { _map, url, })
-    if (_map === false) { // url wasn't able to be fetched by axios
-        let item = (map.has(url)) ? map.get(url) : null
-        item = item ? [...item.slice(0,1), -1] : ['___', -1]
-        map.set(url, item)
-        return { map, level }
-    }
-    if (_map === true) { // url WAS able to be fetched by axios but is not of content-type: text/*
-        let item = (map.has(url)) ? map.get(url) : null
-        item = item ? [...item.slice(0,1), 2] : ['___', 2]
-        map.set(url, item)
-        return { map, level }
-    }
-    if (!_map.size) { // url was gotten but no links found there
-        return { map, level }
-    }
-    if (_map && _map instanceof Map) {
-        // url was fetched so mark the url as having been spidered
-        let item = (map.has(url)) ? map.get(url) : null
-        item = item ? [...item.slice(0,1), 1] : [url, 1]
-        map.set(url, item)
-        level += 1
-        // add to the map any other hitherto unknown links found
-        for (let [key, value] of _map) {
-            key = key.trim()
-            if (map.has(key)) {
-                if (debug) console.log(59, `map already has url ${key}`, map.get(key), 'new value:', value)
-                /* TODO: handle multiple linkText instances for same url */
-                // let _linkText = Array.isArray(map.get(key)) && map.get(key).length > 0
-                //     ? map.get(key).shift()
-                //     : ''
-                // let linkTextArr 
-            }
-            if (!map.has(key)) map.set(key, value)
-        }
-    }
-    if (debug) console.log(66, {map})
+    level += 1
 
-    let nextUrl
-    const getNextUrl = map => Array.from(map.keys())
-        .filter(key => map.get(key)[1]===0 && key.startsWith(baseUrl))
-        .shift()
+	let result = await getLinks(url, linkmap)
+    // console.log(195, require('util').inspect(linkmap, { showHidden: true, depth: null }))
+    // console.log('\n')
 
-    let hasMoreUrls = Array.from(map.keys()).filter(key => map.get(key)[1]===0 && key.startsWith(baseUrl)).length
-    while (hasMoreUrls) {
-        nextUrl = getNextUrl(map)
-        if (debug) console.log(119, {hasMoreUrls, nextUrl, level})
+    let idx = Array.from(linkmap.getAll().keys()).findIndex(key => key === url) || 0
+    outputProgress({url, index:(idx + 1), total: Array.from(linkmap.getAll().keys()).length || 0})
+
+    const getNextUrl = linkmap => 
+        Array.from(linkmap.getAll().keys())
+            .filter(url => linkmap.getStatusForUrl(url)===STATUS_NOT_FETCHED && url.startsWith(baseUrl))
+            .shift()
+    if (debug) console.log(190, {getNextUrl: getNextUrl(linkmap)})
+    
+    let hasMoreUrls = linkmap => 
+        Array.from(linkmap.getAll().keys())
+            .filter(url => linkmap.getStatusForUrl(url)===STATUS_NOT_FETCHED && url.startsWith(baseUrl))
+            .length
+    while (hasMoreUrls(linkmap)) {
+        const nextUrl = getNextUrl(linkmap)
+        if (debug) console.log(119, {hasMoreUrls: hasMoreUrls(linkmap), nextUrl, level})
         if (nextUrl) {
-            await delay()
-            ;({ level, map } = await spider(nextUrl, map, level)) // recurse
+            // await delay()
+            ;({ linkmap, level } = await spider(nextUrl, linkmap, level)) // recurse
         }
-        nextUrl = getNextUrl(map)
-        hasMoreUrls = Array.from(map.keys()).filter(key => map.get(key)[1]===0 && key.startsWith(baseUrl)).length
     }
 
-    if (debug) console.log('exiting... ', {map, level})
-    return { map, level }
+    if (debug) console.log('exiting... ', {linkmap, level})
+    return { linkmap, level }
 }
 
-const showReport = map => {
-    map = map && map instanceof Map ? map : false
-    if (!map) return
-    if (debug) console.log(157, {map})
-    
-    const linksSkipped = Array.from(map.keys()).filter(key => map.get(key)[1]===0)
-    if (linksSkipped.length) {
-        console.log('\nLINKS SKIPPED (EXTERNAL?)\n')
-        linksSkipped.forEach(link => console.log(link))
-        console.log('\n')
+const showReport = linkmap => {
+    linkmap = linkmap && linkmap instanceof LinkMap ? linkmap : false
+    if (!linkmap) return
+    if (debug) console.log(157, {linkmap})
+    // console.log(244, 'dump ::'); linkmap.dump()
+
+    const outputListOfLinksOfStatusType = ({linkmap, code=null, hdr=''}) => {
+        code = isNaN(parseInt(code)) ? null : parseInt(code)
+        if (    code === null
+            ||  !linkmap 
+            ||  !(linkmap instanceof LinkMap)
+            ||  ![
+                    LinkMap.STATUS_NOT_FETCHED,
+                    LinkMap.STATUS_NOT_FOUND,
+                    LinkMap.STATUS_FETCHED,
+                    LinkMap.STATUS_NON_TEXT
+                ].includes(code)
+        ) return
+        const links = linkmap.getLinksByStatusCode(code)
+        if (!links) return
+        const underline = '='.repeat(hdr.length)
+        console.log(`\n${underline}\n${hdr}\n${underline}\n`)
+        links.forEach(link => console.log(link))
+        console.log('')
     }
-    const linksNotText = Array.from(map.keys()).filter(key => map.get(key)[1]===2)
-    if (linksNotText.length) {
-        console.log('\nLINKS TO DOWNLOADS OR IMAGES\n')
-        linksNotText.forEach(link => console.log(link))
-        console.log('\n')
-    }
-    const brokenLinks = Array.from(map.keys()).filter(key => map.get(key)[1] < 0)
-    if (brokenLinks.length) {
-        console.log('\nBROKEN LINKS\n')
-        brokenLinks.forEach(link => console.log(link))
-        console.log('\n')
-    }
-    const linksOk = Array.from(map.keys()).filter(key => map.get(key)[1]===1)
-    if (linksOk.length) {
-        console.log('\nWORKING LINKS\n')
-        linksOk.forEach(link => console.log(link))
-        console.log('\n')
-    }
+
+    outputListOfLinksOfStatusType({linkmap, code: LinkMap.STATUS_NOT_FETCHED, hdr: 'LINKS SKIPPED (EXTERNAL?)'})
+    outputListOfLinksOfStatusType({linkmap, code: LinkMap.STATUS_NON_TEXT,    hdr: 'LINKS TO DOWNLOADS OR IMAGES'})
+    outputListOfLinksOfStatusType({linkmap, code: LinkMap.STATUS_NOT_FOUND,   hdr: 'BROKEN LINKS'})
+    outputListOfLinksOfStatusType({linkmap, code: LinkMap.STATUS_FETCHED,     hdr: 'WORKING LINKS'})
+
+    return
 }
 
 const outputProgress = ({url=null, index=0, total=0}) => {
@@ -156,6 +222,9 @@ const outputProgress = ({url=null, index=0, total=0}) => {
     process.stdout.cursorTo(0)
     process.stdout.write(' '.repeat(process.stdout.getWindowSize()[0]))
     process.stdout.cursorTo(0)
+    url = (url.length > process.stdout.getWindowSize()[0] - 27)
+        ? url.substr(0, 23) + '...'
+        : url.padEnd(process.stdout.getWindowSize()[0] - 27, ' ')
     process.stdout.write(
         `processing url: ${url} ${index} of ${total}` 
     )
@@ -167,10 +236,10 @@ const usage = () => {
 
 ;(async () => {
     if (!startUrl) return usage()
-	let { level, map } = await spider(startUrl)
+	let { level, linkmap } = await spider(startUrl)
     process.stdout.cursorTo(0)
     process.stdout.write(' '.repeat(process.stdout.getWindowSize()[0]))
-    if (debug) console.log(124, {map, level})
+    if (debug) console.log(124, {linkmap, level})
     if (level===0) return console.log(`URL ${startUrl} not found`)
-    showReport(map)
+    showReport(linkmap)
 })()
