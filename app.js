@@ -10,6 +10,12 @@ let baseUrl,
     // debug = false
     debug = (process.argv.length > 3) ? !!(process.argv[3]) : false
 
+const axios_options = {
+    headers: {
+        'User-Agent': 'njs-LinkChecker-0.0.1'
+    }
+}
+
 const setDebug = (bool) => debug = !!(bool || false)
 
 const delay = async (msec) => {
@@ -25,7 +31,7 @@ const getLinks = async (url, linkmap) => {
     const { STATUS_NOT_FOUND, STATUS_FETCHED, STATUS_NON_TEXT } = LinkMap
     const referrer = url
 	try {
-		const pageHTML = await axios.get(url)
+		const pageHTML = await axios.get(url, axios_options)
         linkmap.addUrl(url)
         linkmap.setStatus(url, STATUS_FETCHED)
 
