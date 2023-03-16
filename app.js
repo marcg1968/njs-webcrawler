@@ -4,6 +4,7 @@ const axios = require('axios')
 const cheerio = require('cheerio')
 const process = require('process')
 const { LinkMap } = require('./linkmap')
+const URL = require('url').URL
 
 let baseUrl,
     startUrl = (process.argv.length > 2) ? process.argv[2] : false,
@@ -25,11 +26,29 @@ const delay = async (msec) => {
 	return new Promise(resolve => setTimeout(resolve, msec))
 }
 
+const isUrlValid = url => {
+    try {
+        new URL(url)
+        return true
+    }
+    catch (err) {
+        return false
+    }
+}
+
 const getLinks = async (url, linkmap) => {
     linkmap = (linkmap && linkmap instanceof LinkMap) ? linkmap : false
     if (!linkmap) return
-    const { STATUS_NOT_FOUND, STATUS_FETCHED, STATUS_NON_TEXT } = LinkMap
+    const { STATUS_NOT_FOUND, STATUS_FETCHED, STATUS_NON_TEXT, STATUS_URL_INVALID } = LinkMap
     const referrer = url
+
+	// test url validity
+    if (isUrlValid(url) === false) {
+        linkmap.addUrl(url)
+        linkmap.setStatus(url, STATUS_URL_INVALID)
+        return false
+    }
+
 	try {
 		const pageHTML = await axios.get(url, axios_options)
         linkmap.addUrl(url)
@@ -120,7 +139,8 @@ const showReport = linkmap => {
                     LinkMap.STATUS_NOT_FETCHED,
                     LinkMap.STATUS_NOT_FOUND,
                     LinkMap.STATUS_FETCHED,
-                    LinkMap.STATUS_NON_TEXT
+                    LinkMap.STATUS_NON_TEXT,
+                    LinkMap.STATUS_URL_INVALID
                 ].includes(code)
         ) return
         const links = linkmap.getLinksByStatusCode(code)
@@ -135,6 +155,7 @@ const showReport = linkmap => {
     outputListOfLinksOfStatusType({linkmap, code: LinkMap.STATUS_NON_TEXT,    hdr: 'LINKS TO DOWNLOADS OR IMAGES'})
     outputListOfLinksOfStatusType({linkmap, code: LinkMap.STATUS_NOT_FOUND,   hdr: 'BROKEN LINKS'})
     outputListOfLinksOfStatusType({linkmap, code: LinkMap.STATUS_FETCHED,     hdr: 'WORKING (INTERNAL) LINKS'})
+    outputListOfLinksOfStatusType({linkmap, code: LinkMap.STATUS_URL_INVALID, hdr: 'INVALID URLS'})
 
     return
 }
@@ -156,6 +177,18 @@ const usage = () => {
     console.log(`Usage: ${process.argv[1]} START_URL [OUTPUT_DEBUG]`)
 }
 
+const showReferrerLinkReport = refmap => {
+    const hdr = 'Links by referrer'
+    const underline = '='.repeat(hdr.length)
+    console.log(`\n${underline}\n${hdr}\n${underline}`)
+    for (let [ url, refs ] of refmap) {
+        // console.log('\n*** URL:', url)
+        console.log(`\n${url}`)
+        console.log(`- ${refs.join('\n- ')}`)
+    }
+    console.log('')
+}
+
 ;(async () => {
     if (!startUrl) return usage()
 	let { level, linkmap } = await spider(startUrl)
@@ -164,4 +197,6 @@ const usage = () => {
     if (debug) console.log(124, {linkmap, level})
     if (level===0) return console.log(`URL ${startUrl} not found`)
     showReport(linkmap)
+    let refmap = linkmap.getLinksByReferrer()
+    showReferrerLinkReport(refmap)
 })()

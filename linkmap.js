@@ -7,6 +7,7 @@ class LinkMap {
     static STATUS_NOT_FOUND      = -1
     static STATUS_FETCHED        = 1
     static STATUS_NON_TEXT       = 2
+    static STATUS_URL_INVALID    = 4
 
     constructor(startUrl) {
         this.map = new Map()
@@ -61,12 +62,26 @@ class LinkMap {
                     this.constructor.STATUS_NOT_FETCHED,
                     this.constructor.STATUS_NOT_FOUND,
                     this.constructor.STATUS_FETCHED,
-                    this.constructor.STATUS_NON_TEXT
+                    this.constructor.STATUS_NON_TEXT,
+                    this.constructor.STATUS_URL_INVALID
                 ].includes(code)
             ||  !this.map.size
         ) return
         return Array.from(this.map.keys())
             .filter(url => this.map.get(url).status === code)
+    }
+    getLinksByReferrer = () => {
+        const _map = new Map()
+        for (let [url, { referrer }] of this.map) {
+            if (referrer.length) {
+                // console.log(url, referrer.join('\n\t'))
+                let _arr = _map.get(url) || []
+                _arr = [ ..._arr, ...referrer ]
+                    .filter((val, i, self) => self.indexOf(val) === i)
+                _map.set(url, _arr)
+            }
+        }
+        return _map
     }
     #process = (type, url, detail) => {
         type = (type==='linkText' || type==='referrer' || type==='status') ? type : false
